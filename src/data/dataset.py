@@ -1,6 +1,6 @@
 import torch
-from torch.utils.data import Dataset
-from .utils import convert_dataframe
+from torch.utils.data import Dataset, DataLoader
+from .utils import convert_dataframe, collate
 
 # Preprocess the data
 class ComplexWordDataset(Dataset):
@@ -12,12 +12,13 @@ class ComplexWordDataset(Dataset):
         # token_ids and label_probs and attention_mask
         data = self.data.iloc[index]
         return {
-            'token_ids': data.token_ids.to(torch.long),
+            'token_ids': torch.tensor(data.token_ids, dtype=torch.long),
             'label_probs': data.label_probs.to(torch.float),
-            'attention_mask': data.attention_maskto(torch.long),
+            'attention_mask': torch.tensor(data.attention_mask, dtype=torch.long),
         }
 
     def __len__(self):
         return self.len
     
-
+    def get_dataloader(self, **kwargs):
+        return DataLoader(self, collate_fn=collate, **kwargs)

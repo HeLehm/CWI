@@ -19,6 +19,9 @@ COLUMNS = [
 
 
 def get_paths():
+    """
+    returns the paths to the train and dev data
+    """
     this_file_path = os.path.abspath(__file__)
     this_dir = os.path.dirname(this_file_path)
     src_dir = os.path.dirname(this_dir)
@@ -29,6 +32,9 @@ def get_paths():
 
 
 def load_pd():
+    """
+    loads the data as a pandas dataframe
+    """
     # load data
     path_train, path_dev = get_paths()
 
@@ -39,13 +45,21 @@ def load_pd():
 
 
 def convert_dataframe(df, tokenizer, max_len=512):
+    """
+    Takes a daframe and converts it to a new dataframe with the following columns:
+    - HITID
+    - text
+    - token_ids
+    - label_probs
+    - attention_mask
+    """
     # gte unique sentences (col: text)
     sentences = df.text.unique()
 
     # create a new dataframe
     df_new = []
 
-    for i, sentence in enumerate(sentences):
+    for _, sentence in enumerate(sentences):
         # get the row of the sentence
         rows = df[df.text == sentence].copy()
         # sort rows by ength of target word
@@ -129,6 +143,27 @@ def _print_row(row, raw_rows, tokenizer):
         print('\033[0m', end=' ')
     print()
     print()
+
+def collate(batch):
+    """
+    collate function for the dataloader
+    """
+    # get the max length of the token_ids
+    max_len = max([len(x['token_ids']) for x in batch])
+    # create the tensors
+    token_ids = torch.zeros((len(batch), max_len), dtype=torch.long)
+    label_probs = torch.zeros((len(batch), max_len), dtype=torch.float)
+    attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+    # fill the tensors
+    for i, data in enumerate(batch):
+        token_ids[i, :len(data['token_ids'])] = data['token_ids']
+        label_probs[i, :len(data['label_probs'])] = data['label_probs']
+        attention_mask[i, :len(data['attention_mask'])] = data['attention_mask']
+    return {
+        'token_ids': token_ids,
+        'label_probs': label_probs,
+        'attention_mask': attention_mask,
+    }
 
     
 
