@@ -5,6 +5,7 @@ from .utils import convert_dataframe, collate
 # Preprocess the data
 class ComplexWordDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_len=512):
+        self.tokenizer = tokenizer
         self.data = convert_dataframe(dataframe, tokenizer, max_len)
         self.len = len(self.data)
 

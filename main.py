@@ -1,6 +1,6 @@
 import torch
 from tqdm import tqdm
-from transformers import BertTokenizerFast, BertModel
+from transformers import AutoTokenizer, AutoModel
 
 from src.data import load_pd, ComplexWordDataset
 from src.model import ModelForTokenRegression
@@ -16,13 +16,11 @@ def main(
     num_epochs=10,
     binary=False,
 ):
-    tokenizer = BertTokenizerFast.from_pretrained(backbone_name)
+    tokenizer = AutoTokenizer.from_pretrained(backbone_name)
     
     # model stuff
-    if finetune != "adapter":
-        backbone = BertModel.from_pretrained(backbone_name, add_pooling_layer=False)
-    else:
-        backbone = BertModel.from_pretrained(backbone_name, add_pooling_layer=False)
+    backbone = AutoModel.from_pretrained(backbone_name, add_pooling_layer=False)
+    if finetune == "adapter":
         backbone.add_adapter(
             "complex_word",
             config="pfeiffer",
@@ -31,7 +29,7 @@ def main(
         backbone.set_active_adapters("complex_word")
     
     
-    model = ModelForTokenRegression(backbone).to(device)
+    model = ModelForTokenRegression(backbone, tokenizer).to(device)
 
     parameters = None
     if finetune == "head":
@@ -145,7 +143,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backbone_name", type=str, default="bert-base-uncased")
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--device", type=str, default="mps")
     parser.add_argument("--finetune", type=str, default="adapter")
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--num_epochs", type=int, default=10)
