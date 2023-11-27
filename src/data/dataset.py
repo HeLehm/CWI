@@ -15,6 +15,7 @@ class ComplexWordDataset(Dataset):
             'token_ids': torch.tensor(data.token_ids, dtype=torch.long),
             'label_probs': data.label_probs.to(torch.float),
             'attention_mask': torch.tensor(data.attention_mask, dtype=torch.long),
+            'label_binary': (data.label_probs > 0).to(torch.long),
         }
 
     def __len__(self):

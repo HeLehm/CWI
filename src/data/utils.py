@@ -139,8 +139,9 @@ def _print_row(row, raw_rows, tokenizer):
     for i,token in enumerate(tokens):
         color = (255, 255, 255) if row.label_probs[i] == 0 else (255, 0, 0)
         print('\033[38;2;{};{};{}m'.format(color[0], color[1], color[2]), end='')
-        print(token, end='')
-        print('\033[0m', end=' ')
+        print(token.replace('##', ''), end='')
+        end = ' ' if not tokens[i+1].startswith('##') else ''
+        print('\033[0m', end=end)
     print()
     print()
 
@@ -154,15 +155,18 @@ def collate(batch):
     token_ids = torch.zeros((len(batch), max_len), dtype=torch.long)
     label_probs = torch.zeros((len(batch), max_len), dtype=torch.float)
     attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+    label_binary = torch.zeros((len(batch), max_len), dtype=torch.long)
     # fill the tensors
     for i, data in enumerate(batch):
         token_ids[i, :len(data['token_ids'])] = data['token_ids']
         label_probs[i, :len(data['label_probs'])] = data['label_probs']
         attention_mask[i, :len(data['attention_mask'])] = data['attention_mask']
+        label_binary[i, :len(data['label_binary'])] = data['label_binary']
     return {
         'token_ids': token_ids,
         'label_probs': label_probs,
         'attention_mask': attention_mask,
+        'label_binary': label_binary,
     }
 
     
