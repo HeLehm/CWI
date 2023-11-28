@@ -81,17 +81,7 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
         samples_seen = 0
 
         for batch in (pbar := tqdm(train_loader, desc=f"Training Epoch {epoch + 1}")):
-            # Move batch to device
-            if binary:
-                label_probs = batch['label_binary'].to(device).unsqueeze(-1).to(torch.float)
-            else:
-                label_probs = batch['label_probs'].to(device).unsqueeze(-1)
-        
-            token_ids = batch['token_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-
-            # Forward pass
-            outputs = model(token_ids, attention_mask=attention_mask)
+            outputs, label_probs, _ = predict_batch(model, batch, device, binary=binary)
             loss = criterion(outputs, label_probs)
 
             # Backward pass and optimization
@@ -109,29 +99,44 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
         model.eval()
         total_val_loss = 0
         total_val_seen = 0
+        print("EVAL SAMPLES: \n")
         with torch.no_grad():
             for batch in dev_loader:
-                if binary:
-                    label_probs = batch['label_binary'].to(device).unsqueeze(-1).to(torch.float)
-                else:
-                    label_probs = batch['label_probs'].to(device).unsqueeze(-1)
-                token_ids = batch['token_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-
-                outputs = model(token_ids, attention_mask=attention_mask)
+                outputs, label_probs, token_ids = predict_batch(model, batch, device, binary=binary)
 
                 loss = criterion(outputs, label_probs)
                 total_val_loss += loss.item()
                 total_val_seen += len(batch)
 
+                
                 print("Predicted:")
                 depict_sample(token_ids[0], outputs[0], tokenizer)
                 print("Label:")
                 depict_sample(token_ids[0], label_probs[0], tokenizer)
+                print()
         print()
         print(f"Epoch {epoch + 1}: Average Validation Loss = {total_val_loss / total_val_seen}")
         print()
 
+        print("Random train sample:")
+        batch = next(iter(train_loader))
+        outputs, label_probs, token_ids = predict_batch(model, batch, device, binary=binary)
+        print("Predicted:")
+        depict_sample(token_ids[0], outputs[0], tokenizer)
+        print("Label:")
+        depict_sample(token_ids[0], label_probs[0], tokenizer)
+        print()
+
+
+def predict_batch(model, batch, device, binary=True):
+    if binary:
+        label_probs = batch['label_binary'].to(device).unsqueeze(-1).to(torch.float)
+    else:
+        label_probs = batch['label_probs'].to(device).unsqueeze(-1)
+    token_ids = batch['token_ids'].to(device)
+    attention_mask = batch['attention_mask'].to(device)
+    outputs = model(token_ids, attention_mask=attention_mask)
+    return outputs, label_probs, token_ids
 
 
 

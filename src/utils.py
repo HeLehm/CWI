@@ -2,6 +2,8 @@ import numpy as np
 
 def interpolate_color(label_prob):
     # Interpolate between white (255, 255, 255) and red (255, 0, 0)
+    # turn < 0 to 0
+    label_prob = max(label_prob, 0)
     r = 255
     g = int(255 * (1 - label_prob))
     b = int(255 * (1 - label_prob))
@@ -11,8 +13,8 @@ def depict_sample(input_ids, logits , tokenizer):
     """
     depict a colored sample
     """
-    input_ids = input_ids.cpu().numpy()
-    logits = logits.cpu().numpy()
+    input_ids = input_ids.cpu().detach().numpy()
+    logits = logits.cpu().detach().numpy()
     tokens = tokenizer.convert_ids_to_tokens(input_ids)
     # ignore padding
     tokens = tokens[:np.array(input_ids).nonzero()[0][-1]]

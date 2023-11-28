@@ -15,6 +15,8 @@ class ModelForTokenRegression(nn.Module):
         outputs = self.backbone(input_ids, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state
         logits = self.regression(sequence_output)
+        # apply sigmoid
+        logits = torch.sigmoid(logits)
         # zero out padding
         logits = logits * attention_mask.unsqueeze(-1).to(torch.float)
         # zero out cls token

@@ -120,30 +120,6 @@ def interpolate_color(label_prob):
     b = int(255 * (1 - label_prob))
     return r, g, b
 
-def _print_row(row, raw_rows, tokenizer):
-    tokenized = tokenizer(row.text, return_offsets_mapping=True)
-    ids = tokenized['input_ids'] 
-    last_non_0 = np.array(ids).nonzero()[0][-1]
-    ids = ids[:last_non_0]
-    # get all target words form raw_rows
-    target_words = raw_rows[raw_rows.label_prob > 0].target_word.unique()
-    print('target words:', target_words)
-    tokens = tokenizer.convert_ids_to_tokens(ids)
-    for i,token in enumerate(tokens):
-        color = interpolate_color(row.label_probs[i])
-        print('\033[38;2;{};{};{}m'.format(color[0], color[1], color[2]), end='')
-        print(token, end='')
-        print('\033[0m', end=' ')
-    print()
-    # now the same in binary
-    for i,token in enumerate(tokens):
-        color = (255, 255, 255) if row.label_probs[i] == 0 else (255, 0, 0)
-        print('\033[38;2;{};{};{}m'.format(color[0], color[1], color[2]), end='')
-        print(token.replace('##', ''), end='')
-        end = ' ' if not tokens[i+1].startswith('##') else ''
-        print('\033[0m', end=end)
-    print()
-    print()
 
 def collate(batch):
     """
@@ -169,31 +145,22 @@ def collate(batch):
         'label_binary': label_binary,
     }
 
+def find_stopwords(df):
+    """
+    find words that are never marked as complex
+    looks at target_words with prob = 0 or words that are never marked as complex
+    """
+    complex_words = set()
+    for _, row in df.iterrows():
+        if row.label_prob != 0:
+            complex_words.add(row.target_word)
     
+    stopwords = set()
+    unique_senetcnes = df.text.unique()
+    for sentence in unique_senetcnes:
+        words = sentence.split()
+        for word in words:
+            if word not in complex_words:
+                stopwords.add(word)
 
-
-if __name__ == "__main__":
-    from transformers import BertTokenizerFast
-    tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-    train_raw, _ = load_pd()
-    train = convert_dataframe(train_raw, tokenizer)
-    # print n random rows
-    n = 3
-    
-    for i in range(n):
-        random_index = np.random.randint(0, len(train))
-        row = train.iloc[random_index]
-        raw_rows = train_raw[train_raw.text == row.text]
-        _print_row(row, raw_rows, tokenizer)
-        #print(row)
-        #print()
-
-
-
-
-
-
-
-
-
-
+    return stopwords
