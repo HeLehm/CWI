@@ -3,14 +3,15 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 
 from src.data import load_pd, ComplexWordDataset
-from src.model import ModelForTokenRegression
+from src.model import ModelForTokenRegression, predict_batch
 from src.utils import depict_sample
 
+torch.set_num_threads(1)
 
 def main(
     backbone_name = 'bert-base-uncased',
-    batch_size = 8,
-    device = "mps",
+    batch_size=8,
+    device="mps",
     finetune="adapter",
     lr=1e-5,
     num_epochs=10,
@@ -27,7 +28,6 @@ def main(
         )
         backbone.train_adapter("complex_word")
         backbone.set_active_adapters("complex_word")
-    
     
     model = ModelForTokenRegression(backbone, tokenizer).to(device)
 
@@ -47,6 +47,9 @@ def main(
 
     print("Number of parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
     optimizer = torch.optim.AdamW(parameters, lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    # reset scheduler
+    scheduler.last_epoch = -1
 
     # data stuff
     t,d = load_pd()
@@ -61,14 +64,19 @@ def main(
         train_dl,
         dev_dl,
         optimizer,
+        scheduler,
         device,
         num_epochs=num_epochs,
         tokenizer=tokenizer,
         binary=binary
     )
 
+    # save model
+    # NOTE: this could be nicer... (dont save backbone)
+    torch.save(model, f"./models/{backbone_name}_{finetune}_{lr}_{num_epochs}_{binary}.pt")
 
-def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, tokenizer=None, binary=True):
+
+def train(model, train_loader, dev_loader, optimizer, scheduler ,device, num_epochs=3, tokenizer=None, binary=True):
     # Loss function
     if binary:
         criterion = torch.nn.BCELoss()
@@ -79,6 +87,9 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
         model.train()
         total_loss = 0
         samples_seen = 0
+        # print lr
+        for param_group in optimizer.param_groups:
+            print("LR:", param_group['lr'])
 
         for batch in (pbar := tqdm(train_loader, desc=f"Training Epoch {epoch + 1}")):
             outputs, label_probs, _ = predict_batch(model, batch, device, binary=binary)
@@ -88,6 +99,7 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             total_loss += loss.item()
             samples_seen += len(batch)
@@ -110,9 +122,9 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
 
                 
                 print("Predicted:")
-                depict_sample(token_ids[0], outputs[0], tokenizer)
+                print(depict_sample(token_ids[0], outputs[0], tokenizer))
                 print("Label:")
-                depict_sample(token_ids[0], label_probs[0], tokenizer)
+                print(depict_sample(token_ids[0], label_probs[0], tokenizer))
                 print()
         print()
         print(f"Epoch {epoch + 1}: Average Validation Loss = {total_val_loss / total_val_seen}")
@@ -122,25 +134,10 @@ def train(model, train_loader, dev_loader, optimizer, device, num_epochs=3, toke
         batch = next(iter(train_loader))
         outputs, label_probs, token_ids = predict_batch(model, batch, device, binary=binary)
         print("Predicted:")
-        depict_sample(token_ids[0], outputs[0], tokenizer)
+        print(depict_sample(token_ids[0], outputs[0], tokenizer))
         print("Label:")
-        depict_sample(token_ids[0], label_probs[0], tokenizer)
+        print(depict_sample(token_ids[0], label_probs[0], tokenizer))
         print()
-
-
-def predict_batch(model, batch, device, binary=True):
-    if binary:
-        label_probs = batch['label_binary'].to(device).unsqueeze(-1).to(torch.float)
-    else:
-        label_probs = batch['label_probs'].to(device).unsqueeze(-1)
-    token_ids = batch['token_ids'].to(device)
-    attention_mask = batch['attention_mask'].to(device)
-    outputs = model(token_ids, attention_mask=attention_mask)
-    return outputs, label_probs, token_ids
-
-
-
-
 
 
 def parse_args():
@@ -150,7 +147,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--device", type=str, default="mps")
     parser.add_argument("--finetune", type=str, default="adapter")
-    parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--num_epochs", type=int, default=10)
     parser.add_argument("--binary", action="store_true")
     return parser.parse_args()

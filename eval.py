@@ -1,0 +1,72 @@
+import torch
+from transformers import AutoTokenizer
+from tqdm import tqdm
+
+from src.data import load_pd, ComplexWordDataset
+from src.model import predict_batch
+from src.utils import depict_sample
+
+torch.set_num_threads(1)
+
+def main(model_path, device="cpu"):
+
+    model = torch.load(model_path)
+    backbone_name = model_path.split("/")[-1].split("_")[0]
+    print("backbone_name:", backbone_name)
+    binary = model_path.split("/")[-1].split("_")[-1] == "True"
+    tokenizer = AutoTokenizer.from_pretrained(backbone_name)
+    model = model.to(device)
+    model.eval()
+
+    # Loss function
+    if binary:
+        criterion = torch.nn.BCELoss()
+    else:
+        criterion = torch.nn.MSELoss()
+
+    _,d = load_pd()
+    dev_ds = ComplexWordDataset(d, tokenizer)
+    dev_dl = dev_ds.get_dataloader(batch_size=1, shuffle=False)
+
+    final_text = ""
+
+    with torch.no_grad():
+        total_val_loss = 0
+        total_val_seen = 0
+        
+        for batch in tqdm(dev_dl):
+            outputs, label_probs, token_ids = predict_batch(model, batch, device, binary=binary)
+            loss = criterion(outputs, label_probs)
+            total_val_loss += loss.item()
+            total_val_seen += len(batch)
+            
+            final_text += "Predicted:\n"
+            final_text += depict_sample(token_ids[0], outputs[0], tokenizer)
+            final_text += "\n"
+            final_text += "Label:\n"
+            final_text += depict_sample(token_ids[0], label_probs[0], tokenizer)
+            final_text += "\n\n"
+
+    # save final text
+    with open("./result_samples.txt", "w") as f:
+        f.write(final_text)
+
+    print(f"Average Validation Loss = {total_val_loss / total_val_seen}")
+    print("Saved result_samples.txt")
+    print(final_text)
+
+
+
+
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--device", type=str, default="mps")
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
+    main(args.model, device=args.device)
+
