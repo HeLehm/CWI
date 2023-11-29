@@ -18,6 +18,9 @@ def depict_sample(input_ids, logits , tokenizer):
     tokens = tokenizer.convert_ids_to_tokens(input_ids)
     # ignore padding
     tokens = tokens[:np.array(input_ids).nonzero()[0][-1]]
+    # ignore cls
+    tokens = tokens[1:]
+    logits = logits[1:]
     
     result = ""
     for i,token in enumerate(tokens):
