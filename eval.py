@@ -1,14 +1,28 @@
 import torch
 from transformers import AutoTokenizer
 from tqdm import tqdm
+import pandas as pd
 
 from src.data import load_pd, ComplexWordDataset
 from src.model import predict_batch
 from src.utils import depict_sample
+from src.data.utils import COLUMNS
 
 torch.set_num_threads(1)
 
-def main(model_path, device="cpu"):
+
+def load_test_set(path):
+    """
+    loads the data as a pandas dataframe
+    """
+    # load data
+    path = "/Users/hergen/Desktop/UHH/MSc/FS 1/NLP/CWI/Assignment-Option-3-cwi-datta/option-3-test/News_Test.tsv"
+
+    df = pd.read_csv(path, sep='\t', names=COLUMNS)
+
+    return df
+
+def main(model_path, device="cpu", data_path=None):
 
     model = torch.load(model_path)
     backbone_name = model_path.split("/")[-1].split("_")[0]
@@ -24,7 +38,7 @@ def main(model_path, device="cpu"):
     else:
         criterion = torch.nn.MSELoss()
 
-    _,d = load_pd()
+    d = load_test_set(data_path)
     dev_ds = ComplexWordDataset(d, tokenizer)
     dev_dl = dev_ds.get_dataloader(batch_size=1, shuffle=False)
 
@@ -64,9 +78,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
     parser.add_argument("--device", type=str, default="mps")
+    parser.add_argument("--data_path", type=str)
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.model, device=args.device)
+    main(args.model, device=args.device, data_path=args.data_path)
 
