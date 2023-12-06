@@ -3,7 +3,7 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 import pandas as pd
 
-from src.data import load_pd, ComplexWordDataset
+from src.data import ComplexWordDataset
 from src.model import predict_batch
 from src.utils import depict_sample
 from src.data.utils import COLUMNS

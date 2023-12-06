@@ -10,7 +10,7 @@ python train.py --device <your device>
 ## Testing
 To test the model, run the following command:
 ```
-python eval.py --device <your device> --model <path to model>
+python eval.py --device <your device> --model <path to model> --data_path <path to data>
 ```
 ## App
 To run the app, run the following command:
