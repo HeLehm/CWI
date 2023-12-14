@@ -13,7 +13,7 @@ device = None
 
 def get_model_path():
     # look into ./models folder
-    models_dir = os.path.join(os.getcwd(), 'models')
+    models_dir = os.path.join(os.getcwd(), 'models', 'cwi')
     # get first models
     model_path = os.path.join(models_dir, os.listdir(models_dir)[0])
     return model_path

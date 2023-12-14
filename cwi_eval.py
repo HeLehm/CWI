@@ -3,10 +3,10 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 import pandas as pd
 
-from src.data import ComplexWordDataset
-from src.model import predict_batch
-from src.utils import depict_sample
-from src.data.utils import COLUMNS
+from src.cwi.data import ComplexWordDataset
+from src.cwi.model import predict_batch
+from src.cwi.utils import depict_sample
+from src.cwi.data.utils import COLUMNS
 
 torch.set_num_threads(1)
 

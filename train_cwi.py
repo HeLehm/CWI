@@ -4,9 +4,9 @@ import os
 
 from transformers import AutoTokenizer, AutoModel
 
-from src.data import load_pd, ComplexWordDataset
-from src.model import ModelForTokenRegression, predict_batch
-from src.utils import depict_sample
+from src.cwi.data import load_pd, ComplexWordDataset
+from src.cwi.model import ModelForTokenRegression, predict_batch
+from src.cwi.utils import depict_sample
 
 import wandb
 
@@ -84,7 +84,9 @@ def main(
     # NOTE: this could be nicer... (dont save backbone)
     if not os.path.exists("./models"):
         os.makedirs("./models")
-    torch.save(model, f"./models/{backbone_name}_{finetune}_{lr}_{num_epochs}_{binary}.pt")
+    if not os.path.exists("./models/cwi"):
+        os.makedirs("./models/cwi")
+    torch.save(model, f"./models/cwi/{backbone_name}_{finetune}_{lr}_{num_epochs}_{binary}.pt")
 
 
 def train(model, train_loader, dev_loader, optimizer, scheduler ,device, num_epochs=3, tokenizer=None, binary=True, logging="none"):
