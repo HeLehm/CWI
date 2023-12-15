@@ -1,3 +1,5 @@
+
+
 ## Complex Word Identification (CWI)
 Simple Project to train and use a CWI pipeline.
 ### Data
@@ -26,3 +28,6 @@ Here is an example screenshot of the app:
 Simple Project that uses the CWI pipeline to simplify a text.
 Basemodel is a [T5](https://huggingface.co/humarin/chatgpt_paraphraser_on_T5_base?text=The+toxic+assets+now+total+184+billion+euros%2C+but+many+fear+the+hole+is+even+bigger.).
 ### Method
+
+## Troubleshooting
+The ```.add_adapter``` method is also implemented by guggingface peft library. If you get an error, try to reinstall transformers.

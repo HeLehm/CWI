@@ -2,7 +2,7 @@ import torch
 from tqdm import tqdm
 import os
 
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer
 
 from src.cwi.data import load_pd, ComplexWordDataset
 from src.cwi.model import ModelForTokenRegression, predict_batch
@@ -27,34 +27,11 @@ def main(
         #weights & biases:
         wandb.init(project="complex_word_identification")
 
-    # model stuff
-    backbone = AutoModel.from_pretrained(backbone_name, add_pooling_layer=False)
-    if finetune == "adapter":
-        backbone.add_adapter(
-            "complex_word",
-            config="pfeiffer",
-        )
-        backbone.train_adapter("complex_word")
-        backbone.set_active_adapters("complex_word")
-    
-    model = ModelForTokenRegression(backbone, tokenizer).to(device)
 
-    parameters = None
-    if finetune == "head":
-        parameters = model.regression.parameters()
-        # turn off grad for the backbone
-        for param in model.backbone.parameters():
-            param.requires_grad = False
-    elif finetune == "all":
-        parameters = model.parameters()
-    elif finetune == "adapter":
-        parameters = model.parameters()
-    else:
-        raise ValueError(f"finetune must be 'head' or 'all', got {finetune}")
-
+    model = ModelForTokenRegression(backbone_name, finetune=finetune).to(device)
 
     print("Number of parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
-    optimizer = torch.optim.AdamW(parameters, lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     # reset scheduler
     scheduler.last_epoch = -1
@@ -86,7 +63,7 @@ def main(
         os.makedirs("./models")
     if not os.path.exists("./models/cwi"):
         os.makedirs("./models/cwi")
-    torch.save(model, f"./models/cwi/{backbone_name}_{finetune}_{lr}_{num_epochs}_{binary}.pt")
+    model.save(f"./models/cwi/{backbone_name}_{finetune}_{lr}_{num_epochs}_{binary}")
 
 
 def train(model, train_loader, dev_loader, optimizer, scheduler ,device, num_epochs=3, tokenizer=None, binary=True, logging="none"):
