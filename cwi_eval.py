@@ -72,7 +72,7 @@ def main(model_path, device="cpu", data_path=None):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, help="path to model directory", default="./models/cwi/bert-base-uncased_adapter_0.001_0_False.pt")
+    parser.add_argument("--model", type=str, help="path to model directory", default="./models/cwi/bert-base-uncased_adapter_0.001_10_False")
     parser.add_argument("--device", type=str, default="mps")
     parser.add_argument("--data_path", type=str)
     return parser.parse_args()

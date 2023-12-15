@@ -79,6 +79,8 @@ class ModelForTokenRegression(nn.Module):
         try:
             adpater_name = model.backbone.load_adapter(os.path.join(dir_path, 'adapter'))
             print(f"Adapter with name {adpater_name} loaded.")
+            # set active
+            model.backbone.set_active_adapters(adpater_name)
         except Exception as e:
             print(e)
             # this is the case if teh model doen't have an adapter named 'complex_word'

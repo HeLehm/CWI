@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template
 import torch
 from transformers import AutoTokenizer
+from src.cwi.model import ModelForTokenRegression
 import os
 import numpy as np
 
@@ -11,23 +12,11 @@ tokenizer = None
 device = None
 
 
-def get_model_path():
-    # look into ./models folder
-    models_dir = os.path.join(os.getcwd(), 'models', 'cwi')
-    # get first models
-    model_path = os.path.join(models_dir, os.listdir(models_dir)[0])
-    return model_path
-
-
 def load_model(model_path, device_="cpu"):
     global model, tokenizer, device
     device = device_
-    # Load model and tokenizer
-    model = torch.load(model_path)
-    backbone_name = model_path.split("/")[-1].split("_")[0]
-    tokenizer = AutoTokenizer.from_pretrained(backbone_name)
-    model = model.to(device)
-    model.eval()
+    model = ModelForTokenRegression.load(model_path, device=device)
+    tokenizer = AutoTokenizer.from_pretrained(model.backbone_name)
 
 
 def interpolate_color(value):
@@ -93,7 +82,7 @@ def process_text(input_text):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", type=str, default=None)
+    parser.add_argument("--model_path", type=str, default="./models/cwi/bert-base-uncased_adapter_0.001_10_False")
     parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
 
@@ -101,8 +90,6 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     model_path = args.model_path
-    if model_path is None:
-        model_path = get_model_path()
     load_model(model_path, device_=args.device)
 
     app.run(debug=True)
