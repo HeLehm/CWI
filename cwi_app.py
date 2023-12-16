@@ -82,7 +82,7 @@ def process_text(input_text):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", type=str, default="./models/cwi/bert-base-uncased_adapter_0.001_10_False")
+    parser.add_argument("--model_path", type=str, default="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False")
     parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
 

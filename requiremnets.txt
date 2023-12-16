@@ -1,3 +1,5 @@
 transformers
-adapter-transformers
 adapters
+pandas
+wandb
+flask

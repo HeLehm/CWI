@@ -1,7 +1,8 @@
 import os
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoConfig, T5EncoderModel
+import adapters
 
 class ModelForTokenRegression(nn.Module):
     def __init__(self, backbone_name, finetune='head', *args, **kwargs):
@@ -10,25 +11,31 @@ class ModelForTokenRegression(nn.Module):
         assert finetune in ['head', 'adapter']
 
         self.backbone_name = backbone_name
-
-        self.backbone = AutoModel.from_pretrained(backbone_name)
+        self.load_backbone(backbone_name, finetune)
+        
         tokenizer = AutoTokenizer.from_pretrained(backbone_name)
 
-        if finetune == "adapter":
-            self.backbone.add_adapter(
-                "complex_word",
-                config="pfeiffer",
-            )
-            self.backbone.train_adapter("complex_word")
-            self.backbone.set_active_adapters("complex_word")
-
         self.regression = nn.Linear(self.backbone.config.hidden_size, 1)
-        self.cls_id = tokenizer.cls_token_id
-        self.sep_id = tokenizer.sep_token_id
-        self.pad_id = tokenizer.pad_token_id
+
+        self.special_ids = tokenizer.all_special_ids
 
         if finetune == "head":
             self.freeze_backbone()
+
+    def load_backbone(self, backbone_name, finetune):
+        # Load the configuration of the model
+        config = AutoConfig.from_pretrained(backbone_name)
+
+        if config.model_type == "t5":
+            self.backbone = T5EncoderModel.from_pretrained(backbone_name)
+        else:
+            self.backbone = AutoModel.from_pretrained(backbone_name)
+
+        if finetune == "adapter":
+            adapters.init(self.backbone)
+            self.backbone.add_adapter("complex_word")
+            self.backbone.train_adapter("complex_word")
+
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -39,8 +46,10 @@ class ModelForTokenRegression(nn.Module):
         sequence_output = outputs.last_hidden_state
         logits = self.regression(sequence_output)
         logits = logits * attention_mask.unsqueeze(-1).to(torch.float)
-        logits = logits * (input_ids != self.cls_id).unsqueeze(-1).to(torch.float)
-        logits = logits * (input_ids != self.sep_id).unsqueeze(-1).to(torch.float)
+
+        # mask special tokens
+        for special_id in self.special_ids:
+            logits = logits * (input_ids != special_id).unsqueeze(-1).to(torch.float)
         return logits
 
     def save(self, dir_path):
@@ -58,7 +67,7 @@ class ModelForTokenRegression(nn.Module):
         try:
             self.backbone.save_adapter(adapter_dir_path, 'complex_word')
         except ValueError:
-            # this is the case if teh model doen't have an adapter named 'complex_word'
+            # this is the case if the model doen't have an adapter named 'complex_word'
             pass
 
     @classmethod
@@ -77,6 +86,7 @@ class ModelForTokenRegression(nn.Module):
         # Load the adapter state dict if it exists
         # just try
         try:
+            adapters.init(model.backbone)
             adpater_name = model.backbone.load_adapter(os.path.join(dir_path, 'adapter'))
             print(f"Adapter with name {adpater_name} loaded.")
             # set active
@@ -98,3 +108,14 @@ def predict_batch(model, batch, device, binary=True):
     attention_mask = batch['attention_mask'].to(device)
     outputs = model(token_ids, attention_mask=attention_mask)
     return outputs, label_probs, token_ids
+
+if __name__ == "__main__":
+    # test for T5
+    model = ModelForTokenRegression('humarin/chatgpt_paraphraser_on_T5_base', finetune='adapter')
+    print("init model done")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        model.save(tmpdirname)
+        print("save model done")
+        model = ModelForTokenRegression.load(tmpdirname)
+        print("load model done")
