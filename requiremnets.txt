@@ -3,3 +3,7 @@ adapters
 pandas
 wandb
 flask
+scikit-learn
+nltk
+tqdm
+datasets
