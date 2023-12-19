@@ -15,7 +15,7 @@ nltk.download('punkt')
 
 from src.simplify.dataset import ParaphraseDataset, get_chatgpt_dataset_pd
 
-def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path):
+def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path, only_source="cnn_news"):
 
     cwi_model = ModelForTokenRegression.load(cwi_model_path).to(device)
 
@@ -23,6 +23,14 @@ def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path):
 
 
     df = get_chatgpt_dataset_pd()
+
+    if only_source is not None:
+        print(f"Filtering only {only_source} source")
+        print(f"Before: {len(df)}")
+        df = df[df.source == only_source]
+        print(f"After: {len(df)}")
+    
+
     # Split the dataset into training and validation sets
     train_df, val_df = train_test_split(df, test_size=0.1)
 
@@ -122,5 +130,6 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=5e-5)
     parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--cwi_model_path', type=str, default='./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False')
+    parser.add_argument('--only_source', type=str, default=None, choices=["cnn_news", "quora", "wikipedia"])
     args = parser.parse_args()
-    main(args.backbone, args.device, args.batch_size, args.lr, args.epochs, args.cwi_model_path)
+    main(args.backbone, args.device, args.batch_size, args.lr, args.epochs, args.cwi_model_path, args.only_source)
