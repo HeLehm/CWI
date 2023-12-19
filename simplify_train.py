@@ -66,6 +66,7 @@ def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path, only_sou
     # Save the model
     save_dir = "./models/simplify"
     save_dir = os.path.join(save_dir, backbone_name + f"_simplify_{lr}_{batch_size}_{epochs}")
+    os.makedirs(save_dir, exist_ok=True)
     model.save_adapter(save_dir, "simplify")
 
 
