@@ -20,8 +20,9 @@ class CWILogits(LogitsProcessor):
             tokenizer,
             device="cpu",
             scale = 1.0,
-            batch_size=128,
             top_n=128,
+            softmax=True,
+            prog_bar=None,
             *args, **kwargs
     ):
         """
@@ -33,13 +34,21 @@ class CWILogits(LogitsProcessor):
         self.keys = list(tokenizer.vocab.keys())
         self.tokenizer = tokenizer
         self.scale = scale
-        self.batch_size = batch_size
         self.top_n = top_n
+        self.prog_bar = prog_bar
+        self.softmax = softmax
 
     def __call__(self, input_ids, scores):
         """
-        :param input_ids: The input ids, shape (num_beams, seq_len).
-        :param scores: The scores, shape (num_beams, vocab length).
+        
+        input_ids (torch.LongTensor of shape (batch_size, sequence_length))
+            — Indices of input sequence tokens in the vocabulary.
+
+        scores (torch.FloatTensor of shape (batch_size, config.vocab_size))
+            — Prediction scores of a language modeling head.
+            These can be logits for each vocabulary when not using beam search
+            or log softmax for each vocabulary token when using beam search
+
         :return: The scores multiplied by the CWI score.
         NOTE: vocab length example for T5: 32128
         """
@@ -47,51 +56,103 @@ class CWILogits(LogitsProcessor):
         # create input idsl like this:
         # for every beam, for every token, create a new input  and attention mask
     
-        # for every beam
+        # for every item in batch 
         for beam_index, (beam_input_ids, beam_scores) in enumerate(zip(input_ids, scores)):
 
             # for every possible next token (self.keys)
-            # in batches of 32
 
             # try only the top n
-            top_tokens = torch.topk(beam_scores, self.top_n, dim=-1).indices
+            top_tokens_indices = torch.topk(beam_scores, self.top_n, dim=-1).indices
 
             # set other scores to -inf
             mask = torch.ones_like(beam_scores) * float('-inf')
-            mask[top_tokens] = 0
+            mask[top_tokens_indices] = 0
             beam_scores += mask
 
+            # the new input_ids to try
+            top_keys = [self.keys[token_idx] for token_idx in top_tokens_indices]
 
-            for batch_start in range(0, self.top_n, self.batch_size):
-                batch_end = min(batch_start + self.batch_size, self.top_n)
-                batch_keys = [self.keys[token_idx] for token_idx in top_tokens[batch_start:batch_end]]
-                batch_input_ids = torch.cat([beam_input_ids.unsqueeze(0)] * len(batch_keys), dim=0)
-                # add new token to the end of the input ids
-                batch_input_ids = torch.cat([batch_input_ids, torch.zeros_like(batch_input_ids[:, -1]).unsqueeze(-1)], dim=1)
-                batch_input_ids[:, -1] = torch.tensor([self.tokenizer.vocab[key] for key in batch_keys])
-                batch_attention_mask = torch.ones_like(batch_input_ids)
+            # cwi inputs (present input ids + new (top) token)
+            # for every token, create a new input  and attention mask
+            cwi_input_ids = torch.cat([beam_input_ids.unsqueeze(0)] * len(top_keys), dim=0)
+            cwi_input_ids = torch.cat([cwi_input_ids, torch.zeros_like(cwi_input_ids[:, -1]).unsqueeze(-1)], dim=1)
+            cwi_input_ids[:, -1] = torch.tensor([self.tokenizer.vocab[key] for key in top_keys])
+            cwi_input_ids = cwi_input_ids.to(self.model.regression.weight.device)
 
-                batch_input_ids = batch_input_ids.to(self.model.regression.weight.device)
-                batch_attention_mask = batch_attention_mask.to(self.model.regression.weight.device)
+            # cwi pass
+            losses = self.loss_decreasing(cwi_input_ids, max_window_size=6)
 
-                # get the logits
-                logits = self.model(batch_input_ids, batch_attention_mask)
-                # maske sure the logits are in range 0, 1
-                logits = torch.clamp(logits, 0., 1.)
-                # flip logits ( because low is good)
-                logits = 1. - logits
-                # average logits over the sequence
-                logits = logits.mean(dim=1)
+            # softmax and log
+            if self.softmax:
+                losses = torch.log_softmax(losses, dim=-1)
+            else:
+                losses = torch.log(losses)
             
-                logits = logits.squeeze(1)
+            # scale the logits
+            losses = losses * self.scale
 
-                # log scale
-                logits = torch.log(logits)
+            # add the logits to the scores
+            beam_scores[top_tokens_indices] += losses.to(beam_scores.device)
 
-                # scale the logits
-                logits = logits * self.scale
-                
-                # add the logits to the scores
-                beam_scores[batch_start:batch_end] -= logits.to(beam_scores.device)
+        if self.prog_bar is not None:
+            self.prog_bar.update(1)
 
         return scores
+    
+    def cwi(self, input_ids):
+        """
+        scores input_ids based on the cwi model
+        high = simple
+        low = complex
+
+        :param input_ids: shape (batch_size, seq_len)
+
+        returns shape (batch_size, seq_len)
+        """
+        attention_mask = torch.ones_like(input_ids).to(self.model.regression.weight.device)
+        input_ids = input_ids.to(self.model.regression.weight.device)
+        # get the logits
+        logits = self.model(input_ids, attention_mask)
+        # maske sure the logits are in range 0, 1
+        logits = torch.clamp(logits, 0., 1.)
+
+        return logits.squeeze(-1)
+    
+
+    def loss_decreasing(self, input_ids, max_window_size=None):
+        """
+        input ids based on the cwi model, where the lates has the most wight and the first the least
+        """
+        logits = self.cwi(input_ids)
+
+        # linearly scale the logits based on the position
+        # where the last token has the most weight and the first the least
+        # and only the last max_window_size tokens are considered
+        if max_window_size is not None:
+            logits = logits[:, -max_window_size:]
+        logits = torch.linspace(0, 1, logits.shape[-1]).to(logits.device) * logits
+        
+        # take mean over the sequence
+        logits = logits.mean(dim=-1)
+
+        return logits
+    
+    def loss(self, input_ids, mode: str = "mean"):
+        """
+        caluclates loss input_ids based on the cwi model
+        
+        :param input_ids: shape (batch_size, seq_len)
+
+        returns shape (batch_size)
+        """
+        logits = self.cwi(input_ids)
+        
+        # TODO: mean might not be the best messure, as the model can just extend the sentence
+        # aggregate logits over the sequence
+        if mode == "mean":
+            logits = logits.mean(dim=-1)
+        elif mode == "sum":
+            logits = logits.sum(dim=-1)
+
+        return logits
+

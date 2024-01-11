@@ -15,7 +15,7 @@ nltk.download('punkt')
 
 from src.simplify.dataset import ParaphraseDataset, get_chatgpt_dataset_pd
 
-def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path, only_source="cnn_news", cwi_multiplier=1.0):
+def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path, only_source="cnn_news", cwi_multiplier=1.0, no_cache_dataset=False):
 
     cwi_model = ModelForTokenRegression.load(cwi_model_path).to(device)
 
@@ -44,10 +44,10 @@ def main(backbone_name, device, batch_size, lr, epochs, cwi_model_path, only_sou
 
     
     # Prepare the dataset and dataloader
-    train_dataset = ParaphraseDataset(tokenizer, train_df, cache=False)
+    train_dataset = ParaphraseDataset(tokenizer, train_df, cache=not no_cache_dataset)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     
-    val_dataset = ParaphraseDataset(tokenizer, val_df, cache=False)
+    val_dataset = ParaphraseDataset(tokenizer, val_df, cache=not no_cache_dataset)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
     # Optimizer
@@ -143,5 +143,16 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--cwi_model_path', type=str, default='./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False')
     parser.add_argument('--only_source', type=str, default=None, choices=["cnn_news", "quora", "squad_2", None])
+    parser.add_argument("--no_cache_dataset", action="store_true", help="Don't cache the dataset (faster when debugging)")
     args = parser.parse_args()
-    main(args.backbone, args.device, args.batch_size, args.lr, args.epochs, args.cwi_model_path, args.only_source, args.cwi_multiplier)
+    main(
+        args.backbone,
+        args.device,
+        args.batch_size,
+        args.lr,
+        args.epochs,
+        args.cwi_model_path,
+        args.only_source,
+        args.cwi_multiplier,
+        args.no_cache_dataset
+    )
