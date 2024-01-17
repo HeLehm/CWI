@@ -30,6 +30,7 @@ def paraphrase_beam_search(
         temperature=0.7,
         max_length=64,
         cwi=True,
+        cwi_top_n=128,
 ):
     
     if num_beam_groups is None:
@@ -37,6 +38,8 @@ def paraphrase_beam_search(
     
     if num_return_sequences is None:
         num_return_sequences = num_beams
+
+    cwi_top_n = max(cwi_top_n, num_beams * 8)
 
     input_ids = tokenizer(
         f'paraphrase: {question}',

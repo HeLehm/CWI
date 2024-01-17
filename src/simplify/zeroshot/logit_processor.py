@@ -31,12 +31,13 @@ class CWILogits(LogitsProcessor):
         """
         super().__init__(*args, **kwargs)
         self.model = ModelForTokenRegression.load(cwi_model_path, device=device)
-        self.keys = list(tokenizer.vocab.keys())
         self.tokenizer = tokenizer
         self.scale = scale
         self.top_n = top_n
         self.prog_bar = prog_bar
         self.softmax = softmax
+
+        self.beam_search_data = []
 
     def __call__(self, input_ids, scores):
         """
@@ -55,29 +56,41 @@ class CWILogits(LogitsProcessor):
 
         # create input idsl like this:
         # for every beam, for every token, create a new input  and attention mask
-    
+        
         # for every item in batch 
-        for beam_index, (beam_input_ids, beam_scores) in enumerate(zip(input_ids, scores)):
+        for element_idx, (element_input_ids, element_scores) in enumerate(zip(input_ids, scores)):
 
-            # for every possible next token (self.keys)
-
+            # for every possible next token
             # try only the top n
-            top_tokens_indices = torch.topk(beam_scores, self.top_n, dim=-1).indices
+            top_tokens_indices = torch.topk(element_scores, self.top_n, dim=-1).indices
+
+            # if EOS token is top 1, pass
+            if top_tokens_indices[0] == self.tokenizer.eos_token_id:
+                continue
+
+            # also continue if EOS is already in the beam
+            if self.tokenizer.eos_token_id in element_input_ids:
+                continue
 
             # set other scores to -inf
-            mask = torch.ones_like(beam_scores) * float('-inf')
+            mask = torch.ones_like(element_scores) * float('-inf')
             mask[top_tokens_indices] = 0
-            beam_scores += mask
+            # also dont mask EOS token
+            # mask[self.tokenizer.eos_token_id] = 0
+            scores[element_idx, :] += mask
 
-            # the new input_ids to try
-            top_keys = [self.keys[token_idx] for token_idx in top_tokens_indices]
+
 
             # cwi inputs (present input ids + new (top) token)
             # for every token, create a new input  and attention mask
-            cwi_input_ids = torch.cat([beam_input_ids.unsqueeze(0)] * len(top_keys), dim=0)
+            cwi_input_ids = torch.cat([element_input_ids.unsqueeze(0)] * len(top_tokens_indices), dim=0)
+            # add dimension for the new token
             cwi_input_ids = torch.cat([cwi_input_ids, torch.zeros_like(cwi_input_ids[:, -1]).unsqueeze(-1)], dim=1)
-            cwi_input_ids[:, -1] = torch.tensor([self.tokenizer.vocab[key] for key in top_keys])
+            # add thetop tokens
+            cwi_input_ids[:, -1] = top_tokens_indices.detach().to(cwi_input_ids.device)
             cwi_input_ids = cwi_input_ids.to(self.model.regression.weight.device)
+
+            #cwi_input_ids_text = [self.tokenizer.decode(input_ids) for input_ids in cwi_input_ids]
 
             # cwi pass
             losses = self.loss_decreasing(cwi_input_ids, max_window_size=6)
@@ -92,7 +105,7 @@ class CWILogits(LogitsProcessor):
             losses = losses * self.scale
 
             # add the logits to the scores
-            beam_scores[top_tokens_indices] += losses.to(beam_scores.device)
+            scores[element_idx, top_tokens_indices] += losses.to(element_scores.device)
 
         if self.prog_bar is not None:
             self.prog_bar.update(1)
