@@ -19,7 +19,7 @@ class CWILogits(LogitsProcessor):
             cwi_model_path,
             tokenizer,
             device="cpu",
-            scale = 1.0,
+            weight = 1.0,
             top_n=128,
             softmax=True,
             prog_bar=None,
@@ -30,9 +30,13 @@ class CWILogits(LogitsProcessor):
         :param device: The device to use.
         """
         super().__init__(*args, **kwargs)
+
+        assert weight > 0, "weight must be > 0"
+        assert weight <= 1, "weight must be <= 1"
+
         self.model = ModelForTokenRegression.load(cwi_model_path, device=device)
         self.tokenizer = tokenizer
-        self.scale = scale
+        self.weight = weight
         self.top_n = top_n
         self.prog_bar = prog_bar
         self.softmax = softmax
@@ -93,19 +97,19 @@ class CWILogits(LogitsProcessor):
             #cwi_input_ids_text = [self.tokenizer.decode(input_ids) for input_ids in cwi_input_ids]
 
             # cwi pass
-            losses = self.loss_decreasing(cwi_input_ids, max_window_size=6)
+            losses = self.loss(cwi_input_ids, mode="last")#.loss_decreasing(cwi_input_ids, max_window_size=6)
 
             # softmax and log
             if self.softmax:
                 losses = torch.log_softmax(losses, dim=-1)
             else:
                 losses = torch.log(losses)
-            
-            # scale the logits
-            losses = losses * self.scale
 
-            # add the logits to the scores
-            scores[element_idx, top_tokens_indices] += losses.to(element_scores.device)
+            # add the logits to the scores and weight them
+            scores[element_idx, top_tokens_indices] *= (1. - self.weight)
+            scores[element_idx, top_tokens_indices] += (losses.to(element_scores.device) * self.weight)
+            
+
 
         if self.prog_bar is not None:
             self.prog_bar.update(1)
@@ -122,10 +126,9 @@ class CWILogits(LogitsProcessor):
 
         returns shape (batch_size, seq_len)
         """
-        attention_mask = torch.ones_like(input_ids).to(self.model.regression.weight.device)
         input_ids = input_ids.to(self.model.regression.weight.device)
         # get the logits
-        logits = self.model(input_ids, attention_mask)
+        logits = self.model(input_ids)
         # maske sure the logits are in range 0, 1
         logits = torch.clamp(logits, 0., 1.)
 
@@ -166,6 +169,11 @@ class CWILogits(LogitsProcessor):
             logits = logits.mean(dim=-1)
         elif mode == "sum":
             logits = logits.sum(dim=-1)
-
+        elif mode == "last":
+            logits = logits[:, -1].squeeze(-1)
+        elif mode.startswith("window"):
+            window_size = int(mode.split("_")[1])
+            logits = logits[:, -window_size:].mean(dim=-1)
+        
         return logits
 

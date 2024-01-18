@@ -41,7 +41,8 @@ class ModelForTokenRegression(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask=None):
+        attention_mask = self.generate_attention_mask(input_ids, attention_mask)
         outputs = self.backbone(input_ids, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state
         logits = self.regression(sequence_output)
@@ -51,6 +52,15 @@ class ModelForTokenRegression(nn.Module):
         for special_id in self.special_ids:
             logits = logits * (input_ids != special_id).unsqueeze(-1).to(torch.float)
         return logits
+    
+    def generate_attention_mask(self, input_ids, attention_mask=None):
+        if attention_mask is not None:
+            return attention_mask
+        attention_mask = torch.ones_like(input_ids)
+        # Set mask to 0 for all special tokens
+        for special_id in self.special_ids:
+            attention_mask = attention_mask * (input_ids != special_id)
+        return attention_mask
 
     def save(self, dir_path):
         os.makedirs(dir_path, exist_ok=True)

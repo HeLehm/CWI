@@ -9,29 +9,58 @@ def interpolate_color(label_prob):
     b = int(255 * (1 - label_prob))
     return r, g, b
 
-def depict_sample(input_ids, logits , tokenizer):
+def decode_with_mapping(input_ids, tokenizer):
+    """
+    Decodes the input ids to text and attempts to reconstruct a mapping from the decoded text to the original text indices.
+    
+    Args:
+    input_ids (list): List of token ids to be decoded.
+    tokenizer: The tokenizer used for encoding.
+
+    Returns:
+    tuple: Decoded text and list of mappings (start, end) for each decoded word to the original text.
+    """
+    decoded_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+    mappings = []
+    current_position = 0
+
+    for token_id in input_ids:
+        token = tokenizer.decode([token_id], skip_special_tokens=True)
+        if token.strip():  # Ignore special and padding tokens
+            start_position = decoded_text.find(token, current_position)
+            end_position = start_position + len(token)
+            current_position = end_position
+            mappings.append((start_position, end_position))
+        else:
+            mappings.append((None, None))  # For special tokens, we return None mapping
+
+    return decoded_text, mappings
+
+def depict_sample(input_ids, logits, tokenizer, html=False):
     """
     depict a colored sample
     """
     input_ids = input_ids.cpu().detach().numpy()
     logits = logits.cpu().detach().numpy()
-    tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    # ignore padding
-    tokens = tokens[:np.array(input_ids).nonzero()[0][-1]]
-    # ignore cls
-    tokens = tokens[1:]
-    logits = logits[1:]
     
-    result = ""
-    for i,token in enumerate(tokens):
-        color = interpolate_color(logits[i])
-        result += '\033[38;2;{};{};{}m'.format(color[0], color[1], color[2])
-        result += token.replace('##', '')
+    text, mapping = decode_with_mapping(input_ids, tokenizer)
 
-        end = ' ' if len(tokens) >= i + 2 and not tokens[i+1].startswith('##') else ''
-        result += '\033[0m' + end
-    
-    return result
+    # color in each token
+    new_text = ""
+    last_end_index = 0
+    for i, (start, end) in enumerate(mapping):
+        if start is None:
+            continue
+        r, g, b = interpolate_color(logits[i])
+        if html:
+            new_text += f"<span style='background-color:rgb({r},{g},{b})'>{text[start:end]}</span>"
+        else:
+            new_text += f"\033[38;2;{r};{g};{b}m{text[start:end]}\033[0m"
+
+        new_text += text[last_end_index:start]
+        last_end_index = end
+            
+    return new_text
 
     
 

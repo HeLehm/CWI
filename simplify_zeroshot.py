@@ -5,12 +5,7 @@ from src.simplify.zeroshot.logit_processor import CWILogits
 
 from tqdm import tqdm
 
-from transformers import (
-    BeamSearchScorer,
-    LogitsProcessorList,
-    StoppingCriteriaList,
-    MaxLengthCriteria
-)
+from transformers import LogitsProcessorList
 
 device = "mps"
 
@@ -22,24 +17,17 @@ model = AutoModelForSeq2SeqLM.from_pretrained("humarin/chatgpt_paraphraser_on_T5
 def paraphrase_beam_search(
         question,
         num_beams=8,
-        num_beam_groups=None,
         num_return_sequences=None,
         repetition_penalty=10.0,
-        diversity_penalty=3.0,
         no_repeat_ngram_size=2,
         temperature=0.7,
         max_length=64,
         cwi=True,
-        cwi_top_n=128,
+        cwi_top_n=32,
 ):
-    
-    if num_beam_groups is None:
-        num_beam_groups = num_beams
     
     if num_return_sequences is None:
         num_return_sequences = num_beams
-
-    cwi_top_n = max(cwi_top_n, num_beams * 8)
 
     input_ids = tokenizer(
         f'paraphrase: {question}',
@@ -59,9 +47,9 @@ def paraphrase_beam_search(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            scale=100.,
-            top_n=32,
-            softmax=True,
+            weight=0.3,
+            top_n=cwi_top_n,
+            softmax=False,
             prog_bar=prog_bar,
         )
     if cwi:
@@ -69,28 +57,35 @@ def paraphrase_beam_search(
     logits_processor = LogitsProcessorList(processors)
 
 
+
+
     with torch.no_grad():
+        # uses regular beam search
         outputs = model.generate(
             input_ids, temperature=temperature, repetition_penalty=repetition_penalty,
             num_return_sequences=num_return_sequences, no_repeat_ngram_size=no_repeat_ngram_size,
-            num_beams=num_beams, num_beam_groups=num_beam_groups,
-            max_length=max_length, diversity_penalty=diversity_penalty,
+            num_beams=num_beams, num_beam_groups=1,
+            max_length=max_length, diversity_penalty=None,
             logits_processor=logits_processor,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
             bos_token_id=tokenizer.bos_token_id,
+            return_dict_in_generate=True,
+            output_scores=True,
+            do_sample=False,
         )
-    res = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    res = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
 
     # calculate complexity loss
-    loss = cwi_p.loss(outputs, mode="sum").tolist()
+    loss = cwi_p.loss(outputs.sequences, mode="sum").tolist()
 
     return res, loss
 
 if __name__ == '__main__':
     #prompt = "In the realm of zoological taxonomy, the panthera leo, commonly known as the lion, exhibits a fascinating array of behavioral adaptations that enhance its predatory efficacy."
 
-    prompt = "The proliferation of technologically advanced gadgets has substantially augmented the efficacy of our daily communications." # simple: The spread of high-tech devices has greatly improved how well we communicate every day
+    prompt = "The proliferation of technologically advanced gadgets has substantially augmented the efficacy of our daily communications."
+    # simple: The spread of high-tech devices has greatly improved how well we communicate every day
 
     avg_r_loss = 0
     r_sentence, r_loss = paraphrase_beam_search(prompt, cwi=False)
