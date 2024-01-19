@@ -2,6 +2,7 @@ from flask import Flask, request, render_template
 import torch
 from transformers import AutoTokenizer
 from src.cwi.model import ModelForTokenRegression
+from src.cwi.utils import depict_sample
 import os
 import numpy as np
 
@@ -29,29 +30,6 @@ def interpolate_color(value):
     return red, green, blue
 
 
-
-def depict_sample_html(input_ids, logits, tokenizer):
-    """
-    Depict a colored sample for HTML output.
-    """
-    input_ids = input_ids.cpu().detach().numpy()
-    logits = logits.cpu().detach().numpy()
-    tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    tokens = tokens[:np.array(input_ids).nonzero()[0][-1]]  # ignore padding
-    # ignore cls token
-    tokens = tokens[1:]
-    logits = logits[1:]
-    
-    result = ""
-    for i, token in enumerate(tokens):
-        color = interpolate_color(logits[i])
-        colored_token = f'<span style="color: rgb({color[0]}, {color[1]}, {color[2]})">{token.replace("##", "")}</span>'
-        end = ' ' if len(tokens) >= i + 2 and not tokens[i+1].startswith('##') else ''
-        result += colored_token + end
-    
-    return result
-
-
 # Define the route for the main page
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -75,7 +53,7 @@ def process_text(input_text):
         input_ids.to(device),
         attention_mask=attention_mask.to(device)
     )
-    processed_text = depict_sample_html(input_ids[0], outputs[0], tokenizer)
+    processed_text = depict_sample(input_ids[0], outputs[0], tokenizer, html=True)
     return processed_text
     
 
