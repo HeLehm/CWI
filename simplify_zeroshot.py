@@ -1,3 +1,7 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
@@ -14,16 +18,17 @@ tokenizer = AutoTokenizer.from_pretrained("humarin/chatgpt_paraphraser_on_T5_bas
 model = AutoModelForSeq2SeqLM.from_pretrained("humarin/chatgpt_paraphraser_on_T5_base").to(device)
 
 
+
+
+
 def paraphrase_beam_search(
         question,
         num_beams=8,
         num_return_sequences=None,
-        repetition_penalty=10.0,
         no_repeat_ngram_size=2,
-        temperature=0.7,
         max_length=64,
         cwi=True,
-        cwi_top_n=32,
+        cwi_top_n=64,
 ):
     
     if num_return_sequences is None:
@@ -42,13 +47,13 @@ def paraphrase_beam_search(
     processors = []
     prog_bar = None
     if cwi:
-        prog_bar = tqdm(range(max_length * num_beams), desc="Paraphrasing")
+        prog_bar = tqdm(range(64 * num_beams), desc="Paraphrasing")
     cwi_p = CWILogits(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            scale=1.0,
-            top_n=cwi_top_n,
+            pow=10.0,
+            top_n=cwi_top_n, # TODO: this should also be like the other top_n or top_p
             softmax=False,
             prog_bar=prog_bar,
         )
@@ -57,7 +62,8 @@ def paraphrase_beam_search(
     logits_processor = LogitsProcessorList(processors)
 
 
-
+    # set seed
+    torch.manual_seed(42)
 
     with torch.no_grad():
         # uses regular beam search
@@ -66,11 +72,10 @@ def paraphrase_beam_search(
             max_new_tokens=40,
             do_sample=True,
             top_p=0.92,
-            top_k=0,
+            #top_k=cwi_top_n,
 
-            num_return_sequences=num_return_sequences,
+            num_return_sequences=10,
             no_repeat_ngram_size=no_repeat_ngram_size,
-            max_length=max_length,
             logits_processor=logits_processor,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
@@ -97,7 +102,10 @@ if __name__ == '__main__':
         print(f"regular: {sentence} ({loss})")
         avg_r_loss += loss
     avg_r_loss /= len(r_loss)
+    print()
     print(f"average regular loss: {avg_r_loss}")
+    print(f"lowest regular loss: {min(r_loss)}")
+    print()
 
     avg_s_loss = 0
     s_sentence, s_loss = paraphrase_beam_search(prompt, cwi=True)
@@ -105,4 +113,7 @@ if __name__ == '__main__':
         print(f"simple: {sentence} ({loss})")
         avg_s_loss += loss
     avg_s_loss /= len(s_loss)
+    print()
     print(f"average simple loss: {avg_s_loss}")
+    print(f"lowest simple loss: {min(s_loss)}")
+    print()

@@ -98,7 +98,7 @@ class ModelForTokenRegression(nn.Module):
         try:
             adapters.init(model.backbone)
             adpater_name = model.backbone.load_adapter(os.path.join(dir_path, 'adapter'))
-            print(f"Adapter with name {adpater_name} loaded.")
+            #print(f"Adapter with name {adpater_name} loaded.")
             # set active
             model.backbone.set_active_adapters(adpater_name)
         except Exception as e:

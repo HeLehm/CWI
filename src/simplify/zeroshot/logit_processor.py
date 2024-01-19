@@ -7,7 +7,7 @@ from transformers import LogitsProcessor
 
 from ...cwi.model import ModelForTokenRegression
 
-from tqdm import tqdm
+from typing import Optional
 
 class CWILogits(LogitsProcessor):
     """
@@ -19,7 +19,7 @@ class CWILogits(LogitsProcessor):
             cwi_model_path,
             tokenizer,
             device="cpu",
-            scale=1.0,
+            pow=1.0,
             top_n=128,
             softmax=True,
             prog_bar=None,
@@ -31,11 +31,11 @@ class CWILogits(LogitsProcessor):
         """
         super().__init__(*args, **kwargs)
 
-        assert scale > 0, "scale must be > 0"
+        assert pow > 0, "scale must be > 0"
 
         self.model = ModelForTokenRegression.load(cwi_model_path, device=device)
         self.tokenizer = tokenizer
-        self.scale = scale
+        self.pow = pow
         self.top_n = top_n
         self.prog_bar = prog_bar
         self.softmax = softmax
@@ -94,16 +94,29 @@ class CWILogits(LogitsProcessor):
             #cwi_input_ids_text = [self.tokenizer.decode(input_ids) for input_ids in cwi_input_ids]
 
             # cwi pass
+            # wil be number from 0 to 1
+            # 0 = simple -> 1 = complex
+            # we eant to penalize complex tokens
             losses = self.loss(cwi_input_ids, mode="last")#.loss_decreasing(cwi_input_ids, max_window_size=6)
+
 
             # softmax
             if self.softmax:
                 losses = torch.softmax(losses, dim=-1)
             
-            # penalize scores based on the loss
-            scores[element_idx, top_tokens_indices] *= torch.exp(-losses.to(element_scores.device) * self.scale)
+            losses = torch.exp(-losses.to(element_scores.device))
             
+            # scale the losses (potence)
+            losses = losses ** self.pow
 
+            scores[element_idx, top_tokens_indices] = torch.log_softmax(scores[element_idx, top_tokens_indices], dim=-1)
+
+
+            #importantscores = scores[element_idx, top_tokens_indices]
+            #print(f"Scores Min:{min(importantscores).item()}, Max: {max(importantscores).item()} | Losses Min:{min(losses).item()}, Max: {max(losses).item()} ")
+
+            #penalize the scores based on the losses
+            scores[element_idx, top_tokens_indices] += losses
 
         if self.prog_bar is not None:
             self.prog_bar.update(1)
@@ -147,7 +160,7 @@ class CWILogits(LogitsProcessor):
 
         return logits
     
-    def loss(self, input_ids, mode: str = "mean"):
+    def loss(self, input_ids, mode: Optional[str] = "mean"):
         """
         caluclates loss input_ids based on the cwi model
         
@@ -157,7 +170,8 @@ class CWILogits(LogitsProcessor):
         """
         logits = self.cwi(input_ids)
         
-        # TODO: mean might not be the best messure, as the model can just extend the sentence
+        if mode is None:
+            mode = ""
         # aggregate logits over the sequence
         if mode == "mean":
             logits = logits.mean(dim=-1)
