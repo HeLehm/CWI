@@ -47,7 +47,7 @@ def paraphrase_beam_search(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            weight=1.0,
+            scale=1.0,
             top_n=cwi_top_n,
             softmax=False,
             prog_bar=prog_bar,

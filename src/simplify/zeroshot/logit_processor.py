@@ -19,7 +19,7 @@ class CWILogits(LogitsProcessor):
             cwi_model_path,
             tokenizer,
             device="cpu",
-            weight = 1.0,
+            scale=1.0,
             top_n=128,
             softmax=True,
             prog_bar=None,
@@ -31,12 +31,11 @@ class CWILogits(LogitsProcessor):
         """
         super().__init__(*args, **kwargs)
 
-        assert weight > 0, "weight must be > 0"
-        assert weight <= 1, "weight must be <= 1"
+        assert scale > 0, "scale must be > 0"
 
         self.model = ModelForTokenRegression.load(cwi_model_path, device=device)
         self.tokenizer = tokenizer
-        self.weight = weight
+        self.scale = scale
         self.top_n = top_n
         self.prog_bar = prog_bar
         self.softmax = softmax
@@ -83,8 +82,6 @@ class CWILogits(LogitsProcessor):
             # mask[self.tokenizer.eos_token_id] = 0
             scores[element_idx, :] += mask
 
-
-
             # cwi inputs (present input ids + new (top) token)
             # for every token, create a new input  and attention mask
             cwi_input_ids = torch.cat([element_input_ids.unsqueeze(0)] * len(top_tokens_indices), dim=0)
@@ -99,19 +96,12 @@ class CWILogits(LogitsProcessor):
             # cwi pass
             losses = self.loss(cwi_input_ids, mode="last")#.loss_decreasing(cwi_input_ids, max_window_size=6)
 
-            # softmax and log
+            # softmax
             if self.softmax:
-                losses = torch.softmax(losses, dim=-1)#torch.log_softmax(losses, dim=-1)
-            #else:
-            #    losses = torch.log(losses)
-
-            # add the logits to the scores and weight them
-            #scores[element_idx, top_tokens_indices] *= (1. - self.weight)
-            #scores[element_idx, top_tokens_indices] += (losses.to(element_scores.device) * self.weight)
+                losses = torch.softmax(losses, dim=-1)
             
-
-            #penalize scores based on the loss
-            scores[element_idx, top_tokens_indices] *= torch.exp(-losses.to(element_scores.device) * self.weight)
+            # penalize scores based on the loss
+            scores[element_idx, top_tokens_indices] *= torch.exp(-losses.to(element_scores.device) * self.scale)
             
 
 
