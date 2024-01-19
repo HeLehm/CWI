@@ -101,13 +101,17 @@ class CWILogits(LogitsProcessor):
 
             # softmax and log
             if self.softmax:
-                losses = torch.log_softmax(losses, dim=-1)
-            else:
-                losses = torch.log(losses)
+                losses = torch.softmax(losses, dim=-1)#torch.log_softmax(losses, dim=-1)
+            #else:
+            #    losses = torch.log(losses)
 
             # add the logits to the scores and weight them
-            scores[element_idx, top_tokens_indices] *= (1. - self.weight)
-            scores[element_idx, top_tokens_indices] += (losses.to(element_scores.device) * self.weight)
+            #scores[element_idx, top_tokens_indices] *= (1. - self.weight)
+            #scores[element_idx, top_tokens_indices] += (losses.to(element_scores.device) * self.weight)
+            
+
+            #penalize scores based on the loss
+            scores[element_idx, top_tokens_indices] *= torch.exp(-losses.to(element_scores.device) * self.weight)
             
 
 

@@ -47,7 +47,7 @@ def paraphrase_beam_search(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            weight=0.3,
+            weight=1.0,
             top_n=cwi_top_n,
             softmax=False,
             prog_bar=prog_bar,
@@ -62,17 +62,21 @@ def paraphrase_beam_search(
     with torch.no_grad():
         # uses regular beam search
         outputs = model.generate(
-            input_ids, temperature=temperature, repetition_penalty=repetition_penalty,
-            num_return_sequences=num_return_sequences, no_repeat_ngram_size=no_repeat_ngram_size,
-            num_beams=num_beams, num_beam_groups=1,
-            max_length=max_length, diversity_penalty=None,
+            input_ids,
+            max_new_tokens=40,
+            do_sample=True,
+            top_p=0.92,
+            top_k=0,
+
+            num_return_sequences=num_return_sequences,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            max_length=max_length,
             logits_processor=logits_processor,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
             bos_token_id=tokenizer.bos_token_id,
             return_dict_in_generate=True,
             output_scores=True,
-            do_sample=False,
         )
     res = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
 
