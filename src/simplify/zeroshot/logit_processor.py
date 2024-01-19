@@ -38,9 +38,6 @@ class CWILogits(LogitsProcessor):
         self.pow = pow
         self.top_n = top_n
         self.prog_bar = prog_bar
-        self.softmax = softmax
-
-        self.beam_search_data = []
 
     def __call__(self, input_ids, scores):
         """
@@ -54,7 +51,6 @@ class CWILogits(LogitsProcessor):
             or log softmax for each vocabulary token when using beam search
 
         :return: The scores multiplied by the CWI score.
-        NOTE: vocab length example for T5: 32128
         """
 
         # create input idsl like this:
@@ -78,8 +74,6 @@ class CWILogits(LogitsProcessor):
             # set other scores to -inf
             mask = torch.ones_like(element_scores) * float('-inf')
             mask[top_tokens_indices] = 0
-            # also dont mask EOS token
-            # mask[self.tokenizer.eos_token_id] = 0
             scores[element_idx, :] += mask
 
             # cwi inputs (present input ids + new (top) token)
@@ -91,18 +85,10 @@ class CWILogits(LogitsProcessor):
             cwi_input_ids[:, -1] = top_tokens_indices.detach().to(cwi_input_ids.device)
             cwi_input_ids = cwi_input_ids.to(self.model.regression.weight.device)
 
-            #cwi_input_ids_text = [self.tokenizer.decode(input_ids) for input_ids in cwi_input_ids]
-
             # cwi pass
             # wil be number from 0 to 1
             # 0 = simple -> 1 = complex
-            # we eant to penalize complex tokens
             losses = self.loss(cwi_input_ids, mode="last")#.loss_decreasing(cwi_input_ids, max_window_size=6)
-
-
-            # softmax
-            if self.softmax:
-                losses = torch.softmax(losses, dim=-1)
             
             losses = torch.exp(-losses.to(element_scores.device))
             
@@ -111,11 +97,7 @@ class CWILogits(LogitsProcessor):
 
             scores[element_idx, top_tokens_indices] = torch.log_softmax(scores[element_idx, top_tokens_indices], dim=-1)
 
-
-            #importantscores = scores[element_idx, top_tokens_indices]
-            #print(f"Scores Min:{min(importantscores).item()}, Max: {max(importantscores).item()} | Losses Min:{min(losses).item()}, Max: {max(losses).item()} ")
-
-            #penalize the scores based on the losses
+            # increase score for 'easy' tokens
             scores[element_idx, top_tokens_indices] += losses
 
         if self.prog_bar is not None:
@@ -140,26 +122,8 @@ class CWILogits(LogitsProcessor):
         logits = torch.clamp(logits, 0., 1.)
 
         return logits.squeeze(-1)
-    
 
-    def loss_decreasing(self, input_ids, max_window_size=None):
-        """
-        input ids based on the cwi model, where the lates has the most wight and the first the least
-        """
-        logits = self.cwi(input_ids)
 
-        # linearly scale the logits based on the position
-        # where the last token has the most weight and the first the least
-        # and only the last max_window_size tokens are considered
-        if max_window_size is not None:
-            logits = logits[:, -max_window_size:]
-        logits = torch.linspace(0, 1, logits.shape[-1]).to(logits.device) * logits
-        
-        # take mean over the sequence
-        logits = logits.mean(dim=-1)
-
-        return logits
-    
     def loss(self, input_ids, mode: Optional[str] = "mean"):
         """
         caluclates loss input_ids based on the cwi model
@@ -184,4 +148,3 @@ class CWILogits(LogitsProcessor):
             logits = logits[:, -window_size:].mean(dim=-1)
         
         return logits
-

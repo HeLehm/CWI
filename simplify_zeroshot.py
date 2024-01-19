@@ -42,8 +42,6 @@ def paraphrase_beam_search(
         truncation=True,
     ).input_ids.to(model.device)
 
-
-
     # instantiate logits processor
     processors = []
     prog_bar = None
@@ -55,7 +53,6 @@ def paraphrase_beam_search(
             device=device,
             pow=20.0,
             top_n=cwi_top_n, # TODO: this should also be like the other top_n or top_p
-            softmax=False,
             prog_bar=prog_bar,
         )
     if cwi:
