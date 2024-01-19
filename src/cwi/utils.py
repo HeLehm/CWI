@@ -52,17 +52,13 @@ def depict_sample(input_ids, logits, tokenizer, html=False):
         if start is None:
             continue
         r, g, b = interpolate_color(logits[i])
+        # Add the uncolored text before the current token
+        new_text += text[last_end_index:start]
+        # Add the colored token
         if html:
             new_text += f"<span style='background-color:rgb({r},{g},{b})'>{text[start:end]}</span>"
         else:
             new_text += f"\033[38;2;{r};{g};{b}m{text[start:end]}\033[0m"
-
-        new_text += text[last_end_index:start]
         last_end_index = end
             
     return new_text
-
-    
-
-
-

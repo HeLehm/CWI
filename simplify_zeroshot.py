@@ -6,6 +6,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from src.simplify.zeroshot.logit_processor import CWILogits
+from src.cwi.utils import depict_sample
 
 from tqdm import tqdm
 
@@ -52,7 +53,7 @@ def paraphrase_beam_search(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            pow=10.0,
+            pow=20.0,
             top_n=cwi_top_n, # TODO: this should also be like the other top_n or top_p
             softmax=False,
             prog_bar=prog_bar,
@@ -83,10 +84,21 @@ def paraphrase_beam_search(
             return_dict_in_generate=True,
             output_scores=True,
         )
-    res = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+
+    losses = cwi_p.loss(outputs.sequences, mode=None)
+    res = []
+    for i, seq in enumerate(outputs.sequences):
+        res.append(
+            depict_sample(
+                seq,
+                losses[i],
+                tokenizer=tokenizer,
+            )
+        )
+    #res = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
 
     # calculate complexity loss
-    loss = cwi_p.loss(outputs.sequences, mode="sum").tolist()
+    loss = losses.sum(-1).tolist()
 
     return res, loss
 
