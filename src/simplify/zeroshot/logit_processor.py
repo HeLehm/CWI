@@ -7,7 +7,7 @@ from transformers import LogitsProcessor
 
 from ...cwi.model import ModelForTokenRegression
 
-from typing import Optional
+from typing import Optional, Callable
 
 class CWILogits(LogitsProcessor):
     """
@@ -19,7 +19,7 @@ class CWILogits(LogitsProcessor):
             cwi_model_path,
             tokenizer,
             device="cpu",
-            pow=1.0,
+            loss_activation : Callable[[torch.Tensor], torch.Tensor] = lambda x: x,
             top_n=128,
             prog_bar=None,
             *args, **kwargs
@@ -30,13 +30,11 @@ class CWILogits(LogitsProcessor):
         """
         super().__init__(*args, **kwargs)
 
-        assert pow > 0, "scale must be > 0"
-
         self.model = ModelForTokenRegression.load(cwi_model_path, device=device)
         self.tokenizer = tokenizer
-        self.pow = pow
         self.top_n = top_n
         self.prog_bar = prog_bar
+        self.loss_activation = loss_activation
 
     def __call__(self, input_ids, scores):
         # create input idsl like this:
@@ -84,12 +82,10 @@ class CWILogits(LogitsProcessor):
             
             # loss is based on change in sum
             losses = losses - base_loss
-            #print(f"Min loss, {losses.min().item()}, Max loss {losses.max().item()}")
 
             # we use it wrongly here but we want to narrow the parabula
 
-            losses *= self.pow
-            losses = losses ** 3.
+            losses = self.loss_activation(losses)
 
             # clamp
             losses = torch.clamp(losses, 0., 1.)

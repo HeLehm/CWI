@@ -52,9 +52,9 @@ def paraphrase_beam_search(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
-            pow=10.0,
             top_n=cwi_top_n, # TODO: this should also be like the other top_n or top_p
             prog_bar=prog_bar,
+            loss_activation= lambda x: (x * 10.) ** 3.,
         )
     cwi_p.to(device)
     if cwi:
