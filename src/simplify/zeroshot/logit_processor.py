@@ -21,7 +21,6 @@ class CWILogits(LogitsProcessor):
             device="cpu",
             pow=1.0,
             top_n=128,
-            softmax=True,
             prog_bar=None,
             *args, **kwargs
     ):
@@ -40,19 +39,6 @@ class CWILogits(LogitsProcessor):
         self.prog_bar = prog_bar
 
     def __call__(self, input_ids, scores):
-        """
-        
-        input_ids (torch.LongTensor of shape (batch_size, sequence_length))
-            — Indices of input sequence tokens in the vocabulary.
-
-        scores (torch.FloatTensor of shape (batch_size, config.vocab_size))
-            — Prediction scores of a language modeling head.
-            These can be logits for each vocabulary when not using beam search
-            or log softmax for each vocabulary token when using beam search
-
-        :return: The scores multiplied by the CWI score.
-        """
-
         # create input idsl like this:
         # for every beam, for every token, create a new input  and attention mask
         
@@ -78,27 +64,42 @@ class CWILogits(LogitsProcessor):
 
             # cwi inputs (present input ids + new (top) token)
             # for every token, create a new input  and attention mask
-            cwi_input_ids = torch.cat([element_input_ids.unsqueeze(0)] * len(top_tokens_indices), dim=0)
+            # +1 beause last is just the sum loss right now
+            cwi_input_ids = torch.cat([element_input_ids.unsqueeze(0)] * (len(top_tokens_indices) + 1), dim=0)
             # add dimension for the new token
             cwi_input_ids = torch.cat([cwi_input_ids, torch.zeros_like(cwi_input_ids[:, -1]).unsqueeze(-1)], dim=1)
             # add thetop tokens
-            cwi_input_ids[:, -1] = top_tokens_indices.detach().to(cwi_input_ids.device)
-            cwi_input_ids = cwi_input_ids.to(self.model.regression.weight.device)
+            cwi_input_ids[:-1, -1] = top_tokens_indices.detach().to(cwi_input_ids.device)
+            # set to pad token or base loss
+            cwi_input_ids[-1, -1] = self.tokenizer.pad_token_id
 
+            cwi_input_ids = cwi_input_ids.to(self.model.regression.weight.device)
             # cwi pass
             # wil be number from 0 to 1
             # 0 = simple -> 1 = complex
-            losses = self.loss(cwi_input_ids, mode="last")#.loss_decreasing(cwi_input_ids, max_window_size=6)
+            losses = self.loss(cwi_input_ids, mode="sum")
+
+            base_loss = losses[-1]
+            losses = losses[:-1]
             
-            losses = torch.exp(-losses.to(element_scores.device))
-            
-            # scale the losses (potence)
-            losses = losses ** self.pow
+            # loss is based on change in sum
+            losses = losses - base_loss
+            #print(f"Min loss, {losses.min().item()}, Max loss {losses.max().item()}")
+
+            # we use it wrongly here but we want to narrow the parabula
+
+            losses *= self.pow
+            losses = losses ** 3.
+
+            # clamp
+            losses = torch.clamp(losses, 0., 1.)
 
             scores[element_idx, top_tokens_indices] = torch.log_softmax(scores[element_idx, top_tokens_indices], dim=-1)
 
-            # increase score for 'easy' tokens
-            scores[element_idx, top_tokens_indices] += losses
+
+            scores[element_idx, top_tokens_indices] -= losses
+
+
 
         if self.prog_bar is not None:
             self.prog_bar.update(1)
@@ -124,7 +125,7 @@ class CWILogits(LogitsProcessor):
         return logits.squeeze(-1)
 
 
-    def loss(self, input_ids, mode: Optional[str] = "mean"):
+    def loss(self, input_ids, mode: Optional[str] = None):
         """
         caluclates loss input_ids based on the cwi model
         
@@ -148,3 +149,6 @@ class CWILogits(LogitsProcessor):
             logits = logits[:, -window_size:].mean(dim=-1)
         
         return logits
+    
+    def to(self, device):
+        self.model = self.model.to(device)
