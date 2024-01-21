@@ -83,15 +83,12 @@ class CWILogits(LogitsProcessor):
             # loss is based on change in sum
             losses = losses - base_loss
 
-            # we use it wrongly here but we want to narrow the parabula
-
+            # apply activation function to loss
             losses = self.loss_activation(losses)
 
-            # clamp
-            losses = torch.clamp(losses, 0., 1.)
+            losses = torch.log_softmax(losses, dim=-1)
 
             scores[element_idx, top_tokens_indices] = torch.log_softmax(scores[element_idx, top_tokens_indices], dim=-1)
-
 
             scores[element_idx, top_tokens_indices] -= losses
 

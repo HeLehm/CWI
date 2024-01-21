@@ -25,7 +25,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained("humarin/chatgpt_paraphraser_on_T5
 
 def paraphrase_beam_search(
         question,
-        num_beams=8,
+        num_beams=12,
         num_return_sequences=None,
         no_repeat_ngram_size=2,
         max_length=64,
@@ -46,15 +46,23 @@ def paraphrase_beam_search(
     # instantiate logits processor
     processors = []
     prog_bar = None
+    #def act(x):
+    #    x = (x * 10.) ** 3.
+    #    x = torch.clamp(x,-1.,1.)
+    #    return x
+    def linact(x):
+        x = 20 * x
+        x = torch.clamp(x,-1.,1.)
+        return x
     if cwi:
-        prog_bar = tqdm(range(64 * num_beams), desc="Paraphrasing")
+        prog_bar = tqdm(range(max_length * num_beams), desc="Paraphrasing")
     cwi_p = CWILogits(
             cwi_model_path="./models/cwi/humarin/chatgpt_paraphraser_on_T5_base_adapter_0.001_10_False",
             tokenizer=tokenizer,
             device=device,
             top_n=cwi_top_n, # TODO: this should also be like the other top_n or top_p
             prog_bar=prog_bar,
-            loss_activation= lambda x: (x * 10.) ** 3.,
+            loss_activation=linact,
         )
     cwi_p.to(device)
     if cwi:
@@ -69,12 +77,10 @@ def paraphrase_beam_search(
         # uses regular beam search
         outputs = model.generate(
             input_ids,
-            max_new_tokens=40,
-            do_sample=True,
-            top_p=0.92,
-            #top_k=cwi_top_n,
+            num_beams=num_beams,
 
-            num_return_sequences=10,
+            max_new_tokens=max_length,
+            num_return_sequences=num_beams,
             no_repeat_ngram_size=no_repeat_ngram_size,
             logits_processor=logits_processor,
             pad_token_id=tokenizer.pad_token_id,
