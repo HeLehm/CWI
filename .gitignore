@@ -192,3 +192,5 @@ Assignment-Option-3-cwi-datta/
 models/*
 
 .vscode
+
+*.json

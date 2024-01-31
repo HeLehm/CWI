@@ -60,6 +60,9 @@ class ModelForTokenRegression(nn.Module):
         # Set mask to 0 for all special tokens
         for special_id in self.special_ids:
             attention_mask = attention_mask * (input_ids != special_id)
+
+        # TODO: set attteion mask 0 for after EOS token
+        
         return attention_mask
 
     def save(self, dir_path):
