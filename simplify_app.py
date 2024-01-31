@@ -30,6 +30,12 @@ def add_info_to_graph(graph, tokenizer):
             for token_seq in input_with_next_tokens
         ]
 
+        prev_sentence = tokenizer.decode(data['input_ids'][:-1], skip_special_tokens=True)
+        last_token_added = senetnce_so_far[len(prev_sentence):]
+
+        data['sentence_so_far'] = senetnce_so_far
+        data['label'] = last_token_added
+
 
         # info format:
         # (new_rank, old_rank, token, prob)
@@ -135,7 +141,7 @@ def displaySelectedNodeData(data_list):
         return ""
 
     nodes_list = [
-        '#### ' + data['label'] + "\n\n" + info_to_markdown_table(data['info'])+ "\n\n"
+        '#### ' + data['sentence_so_far'] + "\n\n" + info_to_markdown_table(data['info'])+ "\n\n"
         for data in data_list
     ]
 
