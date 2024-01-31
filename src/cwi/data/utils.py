@@ -24,6 +24,7 @@ def get_paths():
     """
     this_file_path = os.path.abspath(__file__)
     this_dir = os.path.dirname(this_file_path)
+    this_dir = os.path.dirname(this_dir)
     src_dir = os.path.dirname(this_dir)
     root_dir = os.path.dirname(src_dir)
     data_dir = os.path.join(root_dir, 'Assignment-Option-3-cwi-datta')

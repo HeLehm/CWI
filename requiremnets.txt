@@ -1,3 +1,9 @@
-transformers>=4.30.2
-torch>=2.2.0
-adapter-transformers>=3.2.1
+transformers
+adapters
+pandas
+wandb
+flask
+scikit-learn
+nltk
+tqdm
+datasets

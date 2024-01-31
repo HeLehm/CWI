@@ -3,10 +3,11 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 import pandas as pd
 
-from src.data import ComplexWordDataset
-from src.model import predict_batch
-from src.utils import depict_sample
-from src.data.utils import COLUMNS
+from src.cwi.data import ComplexWordDataset
+from src.cwi.model import predict_batch, ModelForTokenRegression
+from src.cwi.utils import depict_sample
+from src.cwi.data.utils import COLUMNS
+
 
 torch.set_num_threads(1)
 
@@ -24,11 +25,9 @@ def load_test_set(path):
 
 def main(model_path, device="cpu", data_path=None):
 
-    model = torch.load(model_path)
-    backbone_name = model_path.split("/")[-1].split("_")[0]
-    print("backbone_name:", backbone_name)
+    model = ModelForTokenRegression.load(model_path, device=device)
     binary = model_path.split("/")[-1].split("_")[-1] == "True"
-    tokenizer = AutoTokenizer.from_pretrained(backbone_name)
+    tokenizer = AutoTokenizer.from_pretrained(model.backbone_name)
     model = model.to(device)
     model.eval()
 
@@ -70,13 +69,10 @@ def main(model_path, device="cpu", data_path=None):
     print(final_text)
 
 
-
-
-
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str)
+    parser.add_argument("--model", type=str, help="path to model directory", default="./models/cwi/bert-base-uncased_adapter_0.001_10_False")
     parser.add_argument("--device", type=str, default="mps")
     parser.add_argument("--data_path", type=str)
     return parser.parse_args()
