@@ -1,4 +1,7 @@
 
+## Sentence Simplification
+
+README following soon.
 
 ## Complex Word Identification (CWI)
 Simple Project to train and use a CWI pipeline.
